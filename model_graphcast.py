@@ -1,26 +1,32 @@
 import torch
 import torch.nn as nn
 from torch import Tensor
-
 from torch_geometric.nn.conv import MessagePassing
 from torch_geometric.typing import Adj, OptTensor
 import torch_scatter
-
 from typing import Optional
 
 def mlp_builder(input_dim, hidden_dim, output_dim,
-                num_hidden=2, activation=nn.ReLU, norm_last=True):
+                num_hidden=1, activation=nn.ReLU, act_last=True, norm_last=True):
 
-    layers = [nn.Linear(input_dim, hidden_dim), activation()]
-
-    for _ in range(num_hidden - 1):
-        layers += [nn.Linear(hidden_dim, hidden_dim), activation()]
+    layers = []
+    for _ in range(num_hidden):
+        layers.append(nn.Linear(input_dim, hidden_dim))
+        layers.append(activation())
+        input_dim = hidden_dim
 
     layers.append(nn.Linear(hidden_dim, output_dim))
+
+    if act_last:
+        layers.append(activation())
     if norm_last:
         layers.append(nn.LayerNorm(output_dim))
 
     return nn.Sequential(*layers)
+
+# MLP setting for GC:
+# num_hidden = 1, activateion = nn.GELU, act_last=False, norm_last = True for all MLPs except the decoder
+# num_hidden = 1, activateion = nn.GELU, act_last=False, norm_last = False for the decoder
 
 class Graphcast(nn.Module):
     def __init__(self, 
@@ -51,12 +57,14 @@ class Graphcast(nn.Module):
                                         output_dim=hidden_dim,
                                         num_hidden=encoder_hidden,
                                         activation=self.activation,
+                                        act_last=False,
                                         norm_last=True)
         self.mesh_encoder = mlp_builder(input_dim=input_dim_mesh,
                                         hidden_dim=hidden_dim,
                                         output_dim=hidden_dim,
                                         num_hidden=encoder_hidden,
                                         activation=self.activation,
+                                        act_last=False,
                                         norm_last=True)
 
         self.g2m_encoder = mlp_builder(input_dim=input_dim_edge,
@@ -64,12 +72,14 @@ class Graphcast(nn.Module):
                                         output_dim=hidden_dim,
                                         num_hidden=encoder_hidden,
                                         activation=self.activation,
+                                        act_last=False,
                                         norm_last=True)
         self.m2g_encoder = mlp_builder(input_dim=input_dim_edge,
                                         hidden_dim=hidden_dim,
                                         output_dim=hidden_dim,
                                         num_hidden=encoder_hidden,
                                         activation=self.activation,    
+                                        act_last=False,
                                         norm_last=True)
 
 
@@ -85,6 +95,7 @@ class Graphcast(nn.Module):
                                         output_dim=hidden_dim,
                                         num_hidden=encoder_hidden,
                                         activation=self.activation,
+                                        act_last=False,
                                         norm_last=True)
         
         assert (self.num_layers >= 1), 'Number of message passing layers is not >=1'
@@ -109,6 +120,7 @@ class Graphcast(nn.Module):
                                         output_dim=output_dim_grid,
                                         num_hidden=decoder_hidden,
                                         activation=self.activation,
+                                        act_last=False,
                                         norm_last=False)
                 
         self.reset_parameters()
@@ -192,6 +204,7 @@ class MessagePassingNetwork(MessagePassing):
                                     output_dim=output_dim,
                                     num_hidden=self.num_hidden,
                                     activation=self.activation,
+                                    act_last=False,
                                     norm_last=True)
 
         # input(self embedding, sum of processced adjacent embedding)
@@ -202,6 +215,7 @@ class MessagePassingNetwork(MessagePassing):
                                     output_dim=output_dim,
                                     num_hidden=self.num_hidden,
                                     activation=self.activation,
+                                    act_last=False,
                                     norm_last=True)
 
     def reset_parameters(self):
@@ -280,6 +294,7 @@ class HeteroMessagePassingNetwork(MessagePassing):
                                     output_dim=output_dim,
                                     num_hidden=self.num_hidden,
                                     activation=self.activation,
+                                    act_last=False,
                                     norm_last=True)
 
         # input(self embedding, sum of processced adjacent embedding)
@@ -290,6 +305,7 @@ class HeteroMessagePassingNetwork(MessagePassing):
                                     output_dim=output_dim,
                                     num_hidden=self.num_hidden,
                                     activation=self.activation,
+                                    act_last=False,
                                     norm_last=True)
                                     
     def reset_parameters(self):
